@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16181b" media="(prefers-color-scheme: dark)">
+<title>Home Inventory</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%232f7d6d' d='M12 2 3 6.5v11L12 22l9-4.5v-11zm0 2.2 6.6 3.3L12 10.8 5.4 7.5zM5 9.1l6 3v7.5l-6-3zm8 10.5v-7.5l6-3v7.5z'/></svg>">
+<style>
+:root{
+  --bg:#f6f4ef; --surface:#ffffff; --surface-2:#f0ede6; --line:#e5e1d8; --text:#1f2326; --muted:#6c7176;
+  --accent:#2f7d6d; --accent-ink:#ffffff; --accent-soft:#e3f0ec; --amber:#b7791f; --amber-soft:#fbf0dc;
+  --danger:#c2410c; --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.05); --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#16181b; --surface:#1f2226; --surface-2:#272a2f; --line:#30343a; --text:#eceae6; --muted:#9aa0a6;
+    --accent:#5cb8a3; --accent-ink:#0f1b18; --accent-soft:#1f3631; --amber:#e0a84a; --amber-soft:#3a2f1c; --danger:#f97316;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);}
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 96px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 18px}
+.logo{width:38px;height:38px;border-radius:11px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink)}
+h1{font-size:22px;letter-spacing:-.01em;margin:0;flex:1}
+.stats{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:13px;color:var(--muted);white-space:nowrap}
+.chip b{color:var(--text);font-weight:600}
+
+.quick{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);border:1px solid var(--line);padding:8px;display:flex;gap:8px;align-items:center}
+.quick input{flex:1;min-width:0;border:0;outline:0;background:transparent;padding:10px 8px;font-size:16px}
+.btn{text-decoration:none;color:inherit;border:1px solid var(--line);background:var(--surface);border-radius:11px;padding:9px 14px;display:inline-flex;align-items:center;gap:7px;font-weight:500;transition:.15s}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{color:var(--danger)}
+.mic{width:44px;height:44px;border-radius:12px;border:0;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.mic.live{background:var(--danger);color:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 8px rgba(194,65,12,.15)}}
+.hint{color:var(--muted);font-size:13px;margin:8px 4px 0}
+.hint code{background:var(--surface-2);padding:1px 6px;border-radius:6px;font-size:12.5px}
+
+.toolbar{display:flex;gap:8px;align-items:center;margin:22px 0 12px;flex-wrap:wrap}
+.search{flex:1;min-width:180px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:0 12px}
+.search input{border:0;outline:0;background:transparent;padding:9px 0;flex:1;min-width:0}
+.seg{display:flex;background:var(--surface-2);border-radius:11px;padding:3px}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:8px;color:var(--muted);font-weight:500}
+.seg button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+.group{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+.ghead{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;user-select:none}
+.ghead h2{font-size:15px;margin:0;flex:1;display:flex;align-items:center;gap:8px}
+.ghead .count{color:var(--muted);font-size:13px}
+.ghead svg.chev{transition:.2s;color:var(--muted)}
+.group.closed svg.chev{transform:rotate(-90deg)}
+.group.closed .items{display:none}
+.item{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-top:1px solid var(--line)}
+.item.flash{animation:flash 1.6s}
+@keyframes flash{0%,40%{background:var(--accent-soft)}}
+.item .main{flex:1;min-width:0}
+.item .name{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .meta{font-size:12.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;margin-top:1px}
+.tag{background:var(--surface-2);border-radius:6px;padding:0 7px}
+.tag.stored{background:var(--amber-soft);color:var(--amber)}
+.qty{display:flex;align-items:center;background:var(--surface-2);border-radius:10px}
+.qty button{border:0;background:transparent;width:30px;height:30px;border-radius:10px;color:var(--muted);font-size:17px}
+.qty button:hover{color:var(--text)}
+.qty span{min-width:24px;text-align:center;font-variant-numeric:tabular-nums;font-weight:600}
+.icon{border:0;background:transparent;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--muted)}
+.icon:hover{background:var(--surface-2);color:var(--text)}
+.icon.on{color:var(--amber)}
+.empty{text-align:center;color:var(--muted);padding:48px 16px}
+.empty .big{font-size:40px;margin-bottom:6px}
+
+dialog{border:0;border-radius:18px;padding:0;background:var(--surface);color:var(--text);width:min(560px,calc(100vw - 32px));box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(20,22,25,.45);backdrop-filter:blur(2px)}
+.dlg{padding:20px}
+.dlg h3{margin:0 0 14px;font-size:18px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:13px;color:var(--muted);font-weight:500}
+.field input,.field textarea,.field select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 11px;outline:0;width:100%}
+.field input:focus,.field textarea:focus{border-color:var(--accent)}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.check{display:flex;align-items:center;gap:9px;margin:4px 0 14px;font-weight:500}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.actions .spacer{flex:1}
+textarea.big{min-height:170px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;resize:vertical}
+.preview{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin:4px 0 12px;font-size:13px}
+.preview table{border-collapse:collapse;width:100%}
+.preview th,.preview td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.preview th{position:sticky;top:0;background:var(--surface-2);font-weight:600}
+.muted{color:var(--muted);font-size:13px}
+
+.toast{position:fixed;left:16px;right:16px;margin:0 auto;width:fit-content;bottom:24px;transform:translateY(20px);opacity:0;background:var(--text);color:var(--bg);padding:12px 18px;border-radius:14px;max-width:min(560px,calc(100vw - 32px));box-shadow:0 10px 30px rgba(0,0,0,.25);transition:.25s;pointer-events:none;z-index:10}
+.toast.show{opacity:1;transform:none}
+@media (max-width:560px){
+  .item .meta .notes{display:none}
+  .toolbar .btn span{display:none}
+  h1{font-size:20px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 3 6.5v11L12 22l9-4.5v-11zm0 2.2 6.6 3.3L12 10.8 5.4 7.5zM5 9.1l6 3v7.5l-6-3zm8 10.5v-7.5l6-3v7.5z"/></svg></div>
+    <h1>Home Inventory</h1>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <form class="quick" id="quick" autocomplete="off">
+    <input id="say" placeholder="Add or ask… “3 AA batteries in the kitchen drawer”" aria-label="Add or ask">
+    <button type="button" class="mic" id="mic" title="Speak" aria-label="Speak"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <button class="btn primary" type="submit">Go</button>
+  </form>
+  <p class="hint">Try <code>tent in the attic, stored</code> · <code>where are the batteries?</code> · <code>what's in the garage</code> · <code>used 2 batteries</code> · <code>move the drill to the shed</code></p>
+
+  <div class="toolbar">
+    <label class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--muted)"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" placeholder="Filter items, places, categories"></label>
+    <div class="seg" id="seg"><button data-f="all" class="on">All</button><button data-f="out">In use</button><button data-f="stored">Stored</button></div>
+    <button class="btn" id="newBtn" title="New item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>
+    <button class="btn" id="importBtn" title="Import"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Import</span></button>
+    <a class="btn" href="api/export.csv" title="Export CSV"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0L8 7m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Export</span></a>
+  </div>
+
+  <main id="list"></main>
+</div>
+
+<datalist id="locs"></datalist><datalist id="cats"></datalist>
+
+<dialog id="edit"><form class="dlg" method="dialog" id="editForm">
+  <h3 id="editTitle">Edit item</h3>
+  <div class="field"><label for="f-name">Name</label><input id="f-name" required></div>
+  <div class="row">
+    <div class="field" style="flex:0 0 96px"><label for="f-qty">Quantity</label><input id="f-qty" type="number" min="0" inputmode="numeric"></div>
+    <div class="field"><label for="f-loc">Location</label><input id="f-loc" list="locs" placeholder="Garage / Shelf 2"></div>
+  </div>
+  <div class="field"><label for="f-cat">Category</label><input id="f-cat" list="cats" placeholder="Tools, Camping, Holiday…"></div>
+  <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" rows="2"></textarea></div>
+  <label class="check"><input type="checkbox" id="f-stored"> Packed away in storage</label>
+  <div class="actions"><button type="button" class="btn danger" id="delBtn">Delete</button><span class="spacer"></span><button type="button" class="btn" value="cancel" id="cancelEdit">Cancel</button><button class="btn primary" id="saveBtn">Save</button></div>
+</form></dialog>
+
+<dialog id="imp"><div class="dlg">
+  <h3>Import items</h3>
+  <p class="muted" style="margin-top:-6px">Paste cells straight from Excel / Google Sheets, a CSV with a header row, or a plain list. In lists, a line ending with <b>:</b> sets the location for the lines below it.</p>
+  <div class="field"><textarea class="big" id="impText" placeholder="Garage:&#10;- cordless drill&#10;- 2 tarps&#10;- camping tent, stored&#10;&#10;Kitchen:&#10;- 12 AA batteries in the junk drawer"></textarea></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <label class="btn" style="cursor:pointer">Choose file…<input type="file" id="impFile" accept=".csv,.tsv,.txt,.xlsx,.xls,.ods" hidden></label>
+    <span class="muted" id="impFileName">CSV, TSV, TXT or Excel</span>
+  </div>
+  <div id="impPreview"></div>
+  <div class="actions"><button class="btn" id="impCancel">Cancel</button><button class="btn primary" id="impGo" disabled>Import</button></div>
+</div></dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path, opts = {}) {
+  const r = await fetch('api/' + path, { headers: { 'Content-Type': 'application/json' }, ...opts,
+    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+let items = [], filter = 'all', closed = new Set(JSON.parse(safeGet('closed') || '[]')), flashIds = new Set();
+function safeGet(k){ try { return localStorage.getItem(k) } catch { return null } }
+function safeSet(k,v){ try { localStorage.setItem(k,v) } catch {} }
+
+let toastTimer;
+function toast(msg, ms = 4000) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+async function load() { items = await api('items'); render(); }
+
+const ICON = {
+  box: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>',
+  edit: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  chev: '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>',
+  pin: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'
+};
+
+function render() {
+  const q = $('#q').value.trim().toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  const vis = items.filter(i => (filter === 'all' || (filter === 'stored') === i.stored) &&
+    words.every(w => `${i.name} ${i.location} ${i.category} ${i.notes}`.toLowerCase().includes(w)));
+
+  const qty = items.reduce((a, i) => a + i.quantity, 0);
+  const locSet = new Set(items.map(i => i.location).filter(Boolean));
+  $('#stats').innerHTML = `<span class="chip"><b>${items.length}</b> items</span><span class="chip"><b>${locSet.size}</b> places</span><span class="chip"><b>${items.filter(i=>i.stored).length}</b> stored</span>`;
+  $('#locs').innerHTML = [...locSet].sort().map(l => `<option value="${esc(l)}">`).join('');
+  $('#cats').innerHTML = [...new Set(items.map(i => i.category).filter(Boolean))].sort().map(c => `<option value="${esc(c)}">`).join('');
+
+  if (!items.length) {
+    $('#list').innerHTML = `<div class="empty"><div class="big">📦</div><b>Your inventory is empty</b><br>Type or say something like “drill in the garage”, or import a spreadsheet.</div>`;
+    return;
+  }
+  if (!vis.length) { $('#list').innerHTML = `<div class="empty">Nothing matches.</div>`; return; }
+
+  const groups = new Map();
+  for (const i of vis) { const k = i.location || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); }
+  const keys = [...groups.keys()].sort((a, b) => (!a) - (!b) || a.localeCompare(b));
+  $('#list').innerHTML = keys.map(k => {
+    const list = groups.get(k);
+    const isClosed = closed.has(k) && !q;
+    return `<section class="group ${isClosed ? 'closed' : ''}" data-loc="${esc(k)}">
+      <div class="ghead" data-act="toggle">${ICON.pin}<h2>${esc(k || 'No location')}</h2><span class="count">${list.length}</span>${ICON.chev}</div>
+      <div class="items">${list.map(i => `
+        <div class="item ${flashIds.has(i.id) ? 'flash' : ''}" data-id="${i.id}">
+          <div class="main"><div class="name">${esc(i.name)}</div>
+            <div class="meta">${i.stored ? '<span class="tag stored">Stored</span>' : ''}${i.category ? `<span class="tag">${esc(i.category)}</span>` : ''}${i.notes ? `<span class="notes">${esc(i.notes)}</span>` : ''}</div></div>
+          <div class="qty"><button data-act="dec" aria-label="Decrease">−</button><span>${i.quantity}</span><button data-act="inc" aria-label="Increase">+</button></div>
+          <button class="icon ${i.stored ? 'on' : ''}" data-act="stored" title="${i.stored ? 'Stored — tap to mark in use' : 'In use — tap to mark stored'}">${ICON.box}</button>
+          <button class="icon" data-act="edit" title="Edit">${ICON.edit}</button>
+        </div>`).join('')}</div></section>`;
+  }).join('');
+  flashIds.clear();
+}
+
+$('#list').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'toggle') {
+    const k = b.closest('.group').dataset.loc;
+    closed.has(k) ? closed.delete(k) : closed.add(k);
+    safeSet('closed', JSON.stringify([...closed])); b.closest('.group').classList.toggle('closed'); return;
+  }
+  const id = +b.closest('.item').dataset.id, it = items.find(i => i.id === id);
+  try {
+    if (act === 'inc') await patch(id, { quantity: it.quantity + 1 });
+    if (act === 'dec') {
+      if (it.quantity <= 1) { if (confirm(`Remove “${it.name}” from your inventory?`)) await remove(id); }
+      else await patch(id, { quantity: it.quantity - 1 });
+    }
+    if (act === 'stored') { await patch(id, { stored: !it.stored }); toast(`${it.name}: ${!it.stored ? 'stored' : 'in use'}`, 1800); }
+    if (act === 'edit') openEdit(it);
+  } catch (err) { toast(err.message); }
+});
+
+async function patch(id, data) {
+  const u = await api('items/' + id, { method: 'PATCH', body: data });
+  items = items.map(i => i.id === id ? u : i); render();
+}
+async function remove(id) {
+  await api('items/' + id, { method: 'DELETE' });
+  items = items.filter(i => i.id !== id); render();
+}
+
+$('#seg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  filter = b.dataset.f; document.querySelectorAll('#seg button').forEach(x => x.classList.toggle('on', x === b)); render();
+});
+$('#q').addEventListener('input', render);
+
+// ---- quick add / ask
+$('#quick').addEventListener('submit', async e => {
+  e.preventDefault();
+  const text = $('#say').value.trim(); if (!text) return;
+  await runCommand(text);
+});
+async function runCommand(text) {
+  try {
+    const r = await api('command', { method: 'POST', body: { text } });
+    toast(r.speech, r.action === 'ask' ? 7000 : 3500);
+    $('#say').value = '';
+    await load();
+    if (r.action === 'ask' && r.results?.length) {
+      r.results.forEach(i => flashIds.add(i.id));
+      if (r.kind === 'location') { $('#q').value = r.results[0].location; }
+      else { $('#q').value = ''; }
+      render();
+      document.querySelector('.item.flash')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else { (r.results || []).forEach(i => flashIds.add(i.id)); render(); }
+  } catch (err) { toast(err.message); }
+}
+
+// ---- voice
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec, listening = false;
+$('#mic').addEventListener('click', () => {
+  if (!SR) return toast('Voice input needs Chrome, Edge or Safari (and HTTPS). You can also use Home Assistant Assist.');
+  if (listening) return rec.stop();
+  rec = new SR(); rec.lang = navigator.language || 'en-US'; rec.interimResults = true;
+  rec.onstart = () => { listening = true; $('#mic').classList.add('live'); };
+  rec.onresult = ev => {
+    const t = [...ev.results].map(r => r[0].transcript).join('');
+    $('#say').value = t;
+    if (ev.results[ev.results.length - 1].isFinal) runCommand(t);
+  };
+  rec.onerror = ev => toast(ev.error === 'not-allowed' ? 'Microphone permission was denied.' : 'Voice error: ' + ev.error);
+  rec.onend = () => { listening = false; $('#mic').classList.remove('live'); };
+  rec.start();
+});
+
+// ---- edit dialog
+let editing = null;
+function openEdit(it) {
+  editing = it || null;
+  $('#editTitle').textContent = it ? 'Edit item' : 'New item';
+  $('#delBtn').style.visibility = it ? 'visible' : 'hidden';
+  $('#f-name').value = it?.name || ''; $('#f-qty').value = it?.quantity ?? 1;
+  $('#f-loc').value = it?.location || ''; $('#f-cat').value = it?.category || '';
+  $('#f-notes').value = it?.notes || ''; $('#f-stored').checked = !!it?.stored;
+  $('#edit').showModal(); $('#f-name').focus();
+}
+$('#newBtn').onclick = () => openEdit(null);
+$('#cancelEdit').onclick = () => $('#edit').close();
+$('#editForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = { name: $('#f-name').value, quantity: +$('#f-qty').value || 0, location: $('#f-loc').value,
+    category: $('#f-cat').value, notes: $('#f-notes').value, stored: $('#f-stored').checked };
+  try {
+    if (editing) await patch(editing.id, data);
+    else { const n = await api('items', { method: 'POST', body: data }); flashIds.add(n.id); await load(); }
+    $('#edit').close();
+  } catch (err) { toast(err.message); }
+});
+$('#delBtn').onclick = async () => {
+  if (editing && confirm(`Delete “${editing.name}”?`)) { await remove(editing.id); $('#edit').close(); toast('Deleted'); }
+};
+
+// ---- import
+let parsed = [], previewTimer;
+$('#importBtn').onclick = () => { $('#imp').showModal(); $('#impText').focus(); };
+$('#impCancel').onclick = () => $('#imp').close();
+$('#impText').addEventListener('input', () => { clearTimeout(previewTimer); previewTimer = setTimeout(preview, 250); });
+async function preview() {
+  const text = $('#impText').value;
+  if (!text.trim()) { parsed = []; $('#impPreview').innerHTML = ''; $('#impGo').disabled = true; return; }
+  const r = await api('import?dry_run=1', { method: 'POST', body: { text } });
+  parsed = r.items;
+  $('#impGo').disabled = !parsed.length;
+  $('#impGo').textContent = parsed.length ? `Import ${parsed.length} item${parsed.length > 1 ? 's' : ''}` : 'Import';
+  $('#impPreview').innerHTML = parsed.length ? `<div class="preview"><table><tr><th>Name</th><th>Qty</th><th>Location</th><th>Stored</th><th>Category</th></tr>${
+    parsed.slice(0, 200).map(i => `<tr><td>${esc(i.name)}</td><td>${i.quantity}</td><td>${esc(i.location)}</td><td>${i.stored ? '✓' : ''}</td><td>${esc(i.category || '')}</td></tr>`).join('')}</table></div>` : '<p class="muted">Nothing recognised yet.</p>';
+}
+$('#impGo').onclick = async () => {
+  try {
+    const r = await api('import', { method: 'POST', body: { items: parsed } });
+    r.items.forEach(i => flashIds.add(i.id));
+    $('#imp').close(); $('#impText').value = ''; $('#impPreview').innerHTML = ''; $('#impGo').disabled = true;
+    toast(r.speech); await load();
+  } catch (err) { toast(err.message); }
+};
+$('#impFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  $('#impFileName').textContent = f.name;
+  let text;
+  if (/\.(xlsx|xls|ods)$/i.test(f.name)) {
+    try {
+      const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+      const wb = XLSX.read(await f.arrayBuffer());
+      text = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]], { FS: '\t', blankrows: false });
+    } catch { return toast('Could not read that spreadsheet. Try saving it as CSV, or copy-paste the cells.'); }
+  } else text = await f.text();
+  $('#impText').value = text; preview();
+});
+
+load().catch(err => { $('#list').innerHTML = `<div class="empty">Can't reach the inventory server.<br><span class="muted">${esc(err.message)}</span></div>`; });
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+name: Home Inventory
+version: "1.0.0"
+slug: home_inventory
+description: Simple, good-looking home inventory you can talk to with Assist
+arch: [aarch64, amd64, armv7, armhf, i386]
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:package-variant-closed
+panel_title: Inventory
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: Direct web UI / API access (optional - Assist uses the internal network)

@@ -1,0 +1,10 @@
+# Standalone install (if you don't run Home Assistant OS / Supervised)
+services:
+  home-inventory:
+    build: ./home_inventory
+    container_name: home-inventory
+    ports:
+      - "8099:8099"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

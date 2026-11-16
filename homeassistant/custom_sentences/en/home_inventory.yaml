@@ -1,0 +1,43 @@
+# Put this file in  config/custom_sentences/en/home_inventory.yaml
+language: "en"
+intents:
+  InventoryFind:
+    data:
+      - sentences:
+          - "where (is|are|'s) [my|the|our] {item}"
+          - "where did I (put|leave|store) [my|the|our] {item}"
+          - "where do (I|we) keep [my|the|our] {item}"
+          - "(find|locate) [my|the|our] {item} [in [the] inventory]"
+          - "do (I|we) (have|own) [any|a|an] {item}"
+  InventoryHowMany:
+    data:
+      - sentences:
+          - "how many {item} do (I|we) have [left]"
+  InventoryLocation:
+    data:
+      - sentences:
+          - "what('s| is) (in|on|inside) [the|my|our] {location}"
+          - "what do (I|we) have (in|on) [the|my|our] {location}"
+          - "what('s| is) stored (in|on) [the|my|our] {location}"
+          - "list [everything|the items] (in|on) [the|my|our] {location}"
+  InventoryAdd:
+    data:
+      - sentences:
+          - "(add|put|store) {item} (in|on|into|inside) [the|my|our] {location}"
+          - "I (put|stored|left) {item} (in|on|into|inside) [the|my|our] {location}"
+          - "add {item} to [the] inventory"
+  InventoryRemove:
+    data:
+      - sentences:
+          - "(remove|delete) {item} from [the] inventory"
+          - "I used [up] {item}"
+          - "I (threw away|threw out|got rid of|donated|sold) {item}"
+  InventoryMove:
+    data:
+      - sentences:
+          - "[I] (move|moved) [the|my|our] {item} to [the|my|our] {location}"
+lists:
+  item:
+    wildcard: true
+  location:
+    wildcard: true

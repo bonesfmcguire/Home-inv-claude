@@ -1,0 +1,143 @@
+# Home Inventory <-> Home Assistant
+# Put this file in  config/packages/  and make sure configuration.yaml has:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# URL: add-on installed from this repo as a *local* add-on -> http://local-home-inventory:8099
+#      add-on installed from a GitHub repo -> http://<hash>-home-inventory:8099 (shown on the add-on page as "Hostname")
+#      Docker / other machine -> http://<ip-of-that-machine>:8099
+# Change it in the three places below (search for 8099).
+
+rest_command:
+  inventory_ask:
+    url: "http://local-home-inventory:8099/api/ask"
+    method: POST
+    content_type: "application/json"
+    payload: '{"text": {{ (text | default("")) | tojson }}, "item": {{ (item | default("")) | tojson }}, "location": {{ (location | default("")) | tojson }}}'
+  inventory_command:
+    url: "http://local-home-inventory:8099/api/command"
+    method: POST
+    content_type: "application/json"
+    payload: '{"text": {{ text | tojson }}, "action": {{ (action | default("")) | tojson }}}'
+
+sensor:
+  - platform: rest
+    name: Inventory items
+    unique_id: home_inventory_items
+    resource: "http://local-home-inventory:8099/api/stats"
+    value_template: "{{ value_json['items'] }}"
+    json_attributes: [quantity, locations, stored]
+    unit_of_measurement: items
+    icon: mdi:package-variant-closed
+    scan_interval: 300
+
+# ---- Built-in Assist (no LLM needed). Sentences live in custom_sentences/en/home_inventory.yaml
+intent_script:
+  InventoryFind:
+    action:
+      - action: rest_command.inventory_ask
+        data: { item: "{{ item }}" }
+        response_variable: result
+      - stop: ""
+        response_variable: result
+    speech:
+      text: "{{ action_response.content.speech if action_response.status == 200 else 'The inventory is not reachable.' }}"
+
+  InventoryHowMany:
+    action:
+      - action: rest_command.inventory_ask
+        data: { text: "how many {{ item }}" }
+        response_variable: result
+      - stop: ""
+        response_variable: result
+    speech:
+      text: "{{ action_response.content.speech if action_response.status == 200 else 'The inventory is not reachable.' }}"
+
+  InventoryLocation:
+    action:
+      - action: rest_command.inventory_ask
+        data: { location: "{{ location }}" }
+        response_variable: result
+      - stop: ""
+        response_variable: result
+    speech:
+      text: "{{ action_response.content.speech if action_response.status == 200 else 'The inventory is not reachable.' }}"
+
+  InventoryAdd:
+    action:
+      - action: rest_command.inventory_command
+        data:
+          action: add
+          text: "{{ item }}{% if location is defined and location %} in {{ location }}{% endif %}"
+        response_variable: result
+      - stop: ""
+        response_variable: result
+    speech:
+      text: "{{ action_response.content.speech if action_response.status == 200 else 'The inventory is not reachable.' }}"
+
+  InventoryRemove:
+    action:
+      - action: rest_command.inventory_command
+        data: { action: remove, text: "{{ item }}" }
+        response_variable: result
+      - stop: ""
+        response_variable: result
+    speech:
+      text: "{{ action_response.content.speech if action_response.status == 200 else 'The inventory is not reachable.' }}"
+
+  InventoryMove:
+    action:
+      - action: rest_command.inventory_command
+        data: { action: move, text: "{{ item }} to {{ location }}" }
+        response_variable: result
+      - stop: ""
+        response_variable: result
+    speech:
+      text: "{{ action_response.content.speech if action_response.status == 200 else 'The inventory is not reachable.' }}"
+
+# ---- Tools for an LLM conversation agent (Claude, OpenAI, Ollama, Gemini...).
+# Expose both scripts to Assist: Settings > Voice assistants > Expose.
+script:
+  inventory_lookup:
+    alias: Inventory lookup
+    description: >-
+      Search the home inventory. Use whenever the user asks where something is, whether they own something,
+      how many of an item they have, or what is kept in a room, box or storage. Pass the user's question as query.
+    icon: mdi:magnify
+    fields:
+      query:
+        description: Natural-language question, e.g. "where are the AA batteries" or "what's in the attic"
+        required: true
+        selector: { text: {} }
+    sequence:
+      - action: rest_command.inventory_ask
+        data: { text: "{{ query }}" }
+        response_variable: result
+      - variables:
+          answer:
+            answer: "{{ result.content.speech }}"
+            matches: "{{ result.content['results'] }}"
+      - stop: ""
+        response_variable: answer
+
+  inventory_update:
+    alias: Inventory update
+    description: >-
+      Change the home inventory. Use when the user says they added, put away, stored, bought, used up, threw away
+      or moved something. Pass a short instruction like "add 3 AA batteries in the kitchen drawer",
+      "store the tent in the attic", "remove 2 batteries", or "move the drill to the shed".
+    icon: mdi:package-variant-plus
+    fields:
+      instruction:
+        description: Short instruction starting with add, store, remove, used, or move
+        required: true
+        selector: { text: {} }
+    sequence:
+      - action: rest_command.inventory_command
+        data: { text: "{{ instruction }}" }
+        response_variable: result
+      - variables:
+          answer: { answer: "{{ result.content.speech }}" }
+      - stop: ""
+        response_variable: answer

@@ -32,7 +32,7 @@ docker-compose.yml
 2. Go to **Settings → Add-ons → Add-on Store → ⋮ → Check for updates**. "Home Inventory" appears under **Local add-ons**.
 3. Install it, turn on **Show in sidebar**, and start it.
 
-**From GitHub:** push this repo, set your URL in `repository.yaml`, then go to **Add-on Store → ⋮ → Repositories** and add the repo URL.
+**From GitHub:** push this repo, go to **Add-on Store → ⋮ → Repositories** and add `https://github.com/bonesfmcguire/Home-inv-claude`.
 
 The UI opens from the sidebar through HA ingress, so you're already logged in and it works remotely over Nabu Casa or your own HTTPS.
 

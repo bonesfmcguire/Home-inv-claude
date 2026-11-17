@@ -14,7 +14,7 @@ rest_command:
     url: "http://local-home-inventory:8099/api/ask"
     method: POST
     content_type: "application/json"
-    payload: '{"text": {{ (text | default("")) | tojson }}, "item": {{ (item | default("")) | tojson }}, "location": {{ (location | default("")) | tojson }}}'
+    payload: '{"text": {{ (text | default("")) | tojson }}, "item": {{ (item | default("")) | tojson }}, "location": {{ (location | default("")) | tojson }}, "about": {{ (about | default("")) | tojson }}}'
   inventory_command:
     url: "http://local-home-inventory:8099/api/command"
     method: POST
@@ -27,7 +27,7 @@ sensor:
     unique_id: home_inventory_items
     resource: "http://local-home-inventory:8099/api/stats"
     value_template: "{{ value_json['items'] }}"
-    json_attributes: [quantity, locations, stored]
+    json_attributes: [quantity, locations, stored, value]
     unit_of_measurement: items
     icon: mdi:package-variant-closed
     scan_interval: 300
@@ -58,6 +58,16 @@ intent_script:
     action:
       - action: rest_command.inventory_ask
         data: { location: "{{ location }}" }
+        response_variable: result
+      - stop: ""
+        response_variable: result
+    speech:
+      text: "{{ action_response.content.speech if action_response.status == 200 else 'The inventory is not reachable.' }}"
+
+  InventoryPurchase:
+    action:
+      - action: rest_command.inventory_ask
+        data: { item: "{{ item }}", about: purchase }
         response_variable: result
       - stop: ""
         response_variable: result
@@ -107,7 +117,7 @@ script:
     icon: mdi:magnify
     fields:
       query:
-        description: Natural-language question, e.g. "where are the AA batteries" or "what's in the attic"
+        description: Natural-language question, e.g. "where are the AA batteries" or "what's in the attic" or "how much did the TV cost" or "where did I buy the drill"
         required: true
         selector: { text: {} }
     sequence:
@@ -126,6 +136,7 @@ script:
     description: >-
       Change the home inventory. Use when the user says they added, put away, stored, bought, used up, threw away
       or moved something. Pass a short instruction like "add 3 AA batteries in the kitchen drawer",
+      "add a drill, a saw and 2 tarps in the garage", "I bought a TV from Best Buy for $499 and put it in the living room",
       "store the tent in the attic", "remove 2 batteries", or "move the drill to the shed".
     icon: mdi:package-variant-plus
     fields:

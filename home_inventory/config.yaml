@@ -1,5 +1,5 @@
 name: Home Inventory
-version: "1.0.0"
+version: "1.1.0"
 slug: home_inventory
 description: Simple, good-looking home inventory you can talk to with Assist
 arch: [aarch64, amd64, armv7, armhf, i386]

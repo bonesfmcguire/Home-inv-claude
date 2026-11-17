@@ -3,7 +3,9 @@
 A dead-simple home inventory that you can type to, talk to, paste spreadsheets into, and ask questions through Home Assistant Assist.
 
 - **One box for everything:** type or say `3 AA batteries in the kitchen drawer`, `tent in the attic, stored`, `where are the batteries?`, `what's in the garage`, `used 2 batteries`, or `move the drill to the shed`.
-- **Locations and storage:** items are grouped by place. Use `/` for nesting (`Garage / Shelf 2`). Each item has a **stored** flag (packed away vs. in use).
+- **Lists, not just single items:** `drill, saw and 2 tarps in the garage` adds three items. Paste several lines and you get a review screen first, where you can skip any row before adding.
+- **Locations and storage:** items are grouped by place. Use `/` for nesting (`Garage / Shelf 2`). Places are **case-insensitive**: `living room`, `Living Room` and `LIVING ROOM` are the same place, and a place keeps the spelling you already use. The pencil on a place renames it. Each item has a **stored** flag (packed away vs. in use).
+- **Purchase details and photos:** optional price, purchase date, where it was bought, brand/model, serial number, warranty date and a photo. The list shows thumbnails and total value, and you can ask "how much did the TV cost?"
 - **Bulk input:** paste cells straight from Excel or Google Sheets, upload a CSV/TSV/XLSX, or paste a plain list. You see a preview before anything is imported.
 - **Home Assistant:** runs as an add-on in your sidebar. Assist voice intents and LLM tools let you ask "where are my AA batteries?" from any voice satellite.
 - **No dependencies:** one Python file plus SQLite. Your data is a single `inventory.db` file.
@@ -75,6 +77,7 @@ Use the `PORT` and `DATA_DIR` environment variables to change where it listens a
 | "Add 3 light bulbs in the pantry" / "I stored the tent in the attic" | Adds items (the second one is marked stored) |
 | "I used 2 batteries" / "I threw away the old printer" | Lowers the quantity or removes the item |
 | "Move the drill to the shed" | Changes the item's location |
+| "How much did the TV cost?" / "Where did I buy the drill?" | Reads back price, store and date |
 
 **With an AI conversation agent (Claude, OpenAI, Ollama, Gemini…):** the package also defines two scripts, `script.inventory_lookup` and `script.inventory_update`. Expose both under **Settings → Voice assistants → Expose**. The agent then calls them as tools, so free-form questions like *"do we have anything for a camping trip?"* or *"I just put the spare HDMI cables in the TV cabinet"* work too.
 
@@ -84,7 +87,7 @@ You also get **`sensor.inventory_items`**, with attributes for total quantity, n
 
 ## 3. Getting data in
 
-- **Spreadsheet:** select the cells in Excel or Sheets, copy, then click **Import** and paste. Headers are recognised loosely (`Item/Name`, `Qty/Count`, `Location/Where/Room`, `Stored`, `Category`, `Notes`). Without a header row, columns are read as *Name, Location, Quantity, Category, Notes*. `.xlsx` upload also works; it loads a parser from a CDN on first use. If you're offline, save the sheet as CSV.
+- **Spreadsheet:** select the cells in Excel or Sheets, copy, then click **Add list** and paste. Headers are recognised loosely: `Item/Name`, `Qty/Count`, `Location/Where/Room`, `Stored`, `Category`, `Price/Cost`, `Purchase date/Acquired`, `Store/Purchased from`, `Brand/Model`, `Serial`, `Warranty`, `Notes`. Without a header row, tab-separated columns are read as *Name, Location, Quantity, Category, Notes*. `.xlsx` upload also works; it loads a parser from a CDN on first use. If you're offline, save the sheet as CSV.
 - **Lists:** paste a list like this:
   ```
   Garage:
@@ -94,6 +97,9 @@ You also get **`sensor.inventory_items`**, with attributes for total quantity, n
   Kitchen:
   - 12 AA batteries in the junk drawer
   ```
+  Several items on one line are split on commas and on "and" when it is followed by a quantity or "a/the" (`2 tarps, a ladder and 3 hooks`). A plain "salt and pepper" stays one item.
+- **Buying something:** `I bought a TV from Best Buy for $499 and put it in the living room` fills in price, store and location. You can also add `on 2024-03-01`, `today`, or `warranty until 2027-05-01`. Price is per item.
+- **Photos:** open an item and choose **Add photo**. Photos are shrunk in the browser before upload and stored in `/data/photos` next to the database.
 - **Voice in the app:** tap the mic. This needs Chrome, Edge or Safari and an HTTPS page; the HA sidebar over HTTPS qualifies.
 - **Export:** the **Export** button downloads a CSV that you can edit and re-import. Items with the same name and location are merged and their quantities added together.
 
@@ -102,15 +108,20 @@ You also get **`sensor.inventory_items`**, with attributes for total quantity, n
 | Method | Path | |
 |---|---|---|
 | GET | `/api/items?q=` | list or search items |
-| POST | `/api/items` | add `{name, quantity, location, stored, category, notes}` (or a list of them) |
+| POST | `/api/items` | add `{name, quantity, location, stored, category, notes, price, purchase_date, purchased_from, brand, serial, warranty_until}` (or a list of them) |
+| POST / DELETE | `/api/items/{id}/photo` | upload the raw image bytes (JPEG/PNG/WebP/GIF) / remove it. `?thumb=1` uploads the JPEG thumbnail. Photos are served from `photos/{file}` |
+| POST | `/api/locations/rename` | `{from, to}`: rename a place and everything inside it |
 | PATCH / DELETE | `/api/items/{id}` | update / delete |
-| POST | `/api/command` | `{text}`: natural language add/remove/move/ask → `{speech, results}` |
-| POST | `/api/ask` | `{text}` or `{item}` or `{location}` → `{speech, results}` |
+| POST | `/api/command` | `{text}`: natural language add/remove/move/ask → `{speech, results}`. `dry_run: true` returns what an add would create without saving |
+| POST | `/api/ask` | `{text}` or `{item}` or `{location}` → `{speech, results}`. `{item, about: "purchase"}` answers price / store / date |
 | POST | `/api/import` | `{text}` (CSV/TSV/list) or `{items: [...]}`; add `?dry_run=1` to preview |
-| GET | `/api/stats`, `/api/locations`, `/api/export.csv` | |
+| GET | `/api/stats` (includes total `value`), `/api/locations`, `/api/export.csv` | |
 
 ## Security note
 The app has no login of its own. Through the HA sidebar it is protected by Home Assistant's login. Port 8099 is also exposed on your LAN for direct access and Docker setups. To restrict that, remove the `ports:` section from `home_inventory/config.yaml` (Assist uses HA's internal network and doesn't need it). Don't forward port 8099 to the internet.
 
 ## Back up
-Everything is in `/data/inventory.db` for the add-on, which is included in HA backups, or `./data/inventory.db` with Docker.
+Everything is in `/data` for the add-on (the database plus a `photos/` folder), which is included in HA backups, or `./data` with Docker. Photos make backups larger.
+
+## Upgrading from 1.0
+Just update and restart. Existing items keep working: the database gets the new columns automatically, and on startup places that differ only by capitalisation (`Living room` / `Living Room`) are merged into the spelling most of your items already use.

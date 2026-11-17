@@ -20,6 +20,12 @@ intents:
           - "what do (I|we) have (in|on) [the|my|our] {location}"
           - "what('s| is) stored (in|on) [the|my|our] {location}"
           - "list [everything|the items] (in|on) [the|my|our] {location}"
+  InventoryPurchase:
+    data:
+      - sentences:
+          - "how much (did|does) [the|my|our] {item} cost"
+          - "how much did (I|we) (pay for|spend on) [the|my|our] {item}"
+          - "(where|when) did (I|we) (buy|get|purchase|order) [the|my|our] {item}"
   InventoryAdd:
     data:
       - sentences:

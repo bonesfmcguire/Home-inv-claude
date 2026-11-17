@@ -20,6 +20,21 @@ rest_command:
     method: POST
     content_type: "application/json"
     payload: '{"text": {{ text | tojson }}, "action": {{ (action | default("")) | tojson }}}'
+  inventory_session_start:
+    url: "http://local-home-inventory:8099/api/session/start"
+    method: POST
+    content_type: "application/json"
+    payload: '{"id": {{ id | tojson }}, "area": {{ area | tojson }}, "areas": {{ (areas | default([])) | tojson }}}'
+  inventory_session_say:
+    url: "http://local-home-inventory:8099/api/session/say"
+    method: POST
+    content_type: "application/json"
+    payload: '{"id": {{ id | tojson }}, "text": {{ text | tojson }}}'
+  inventory_session_end:
+    url: "http://local-home-inventory:8099/api/session/end"
+    method: POST
+    content_type: "application/json"
+    payload: '{"id": {{ id | tojson }}}'
 
 sensor:
   - platform: rest
@@ -152,3 +167,135 @@ script:
           answer: { answer: "{{ result.content.speech }}" }
       - stop: ""
         response_variable: answer
+
+  # ---- Hands-free dictation on a voice satellite ("start inventory").
+  # One run = one phrase. Each run asks the satellite a question (no wake word needed), sends what you
+  # said to the inventory, then starts the next run. The inventory server keeps the state (room, undo
+  # history), which is why this re-triggers itself instead of using a loop: Home Assistant scripts can't
+  # carry variables from one loop iteration to the next.
+  inventory_dictation_step:
+    alias: Inventory dictation (one step)
+    mode: parallel
+    max: 10
+    sequence:
+      - wait_template: "{{ is_state(satellite, 'idle') }}"   # let the previous spoken reply finish
+        timeout: "00:00:20"
+        continue_on_timeout: true
+      - action: assist_satellite.ask_question
+        target:
+          entity_id: "{{ satellite }}"
+        data:
+          question: "{{ prompt }}"
+          preannounce: false
+        response_variable: answer
+        continue_on_error: true
+      - variables:
+          heard: >-
+            {{ ((answer.sentence if answer is defined and answer else '') or '') | trim }}
+      - choose:
+          - conditions: "{{ heard == '' }}"        # silence / timeout
+            sequence:
+              - choose:
+                  - conditions: "{{ misses | int(0) >= 1 }}"   # second silence in a row ends the session
+                    sequence:
+                      - action: rest_command.inventory_session_end
+                        data:
+                          id: "{{ satellite }}"
+                        response_variable: ended
+                      - action: assist_satellite.announce
+                        target:
+                          entity_id: "{{ satellite }}"
+                        data:
+                          message: "{{ ended.content.speech if ended is defined and ended.status == 200 else 'Okay.' }}"
+                          preannounce: false
+                default:
+                  - action: script.turn_on
+                    target:
+                      entity_id: script.inventory_dictation_step
+                    data:
+                      variables:
+                        satellite: "{{ satellite }}"
+                        prompt: "I'm still listening. Say done to finish."
+                        misses: "{{ misses | int(0) + 1 }}"
+        default:
+          - action: rest_command.inventory_session_say
+            data:
+              id: "{{ satellite }}"
+              text: "{{ heard }}"
+            response_variable: r
+          - choose:
+              - conditions: "{{ r is defined and r.status == 200 and not r.content.done }}"
+                sequence:
+                  - action: script.turn_on
+                    target:
+                      entity_id: script.inventory_dictation_step
+                    data:
+                      variables:
+                        satellite: "{{ satellite }}"
+                        prompt: "{{ r.content.speech }}"
+                        misses: 0
+            default:       # finished ("done"), session expired, or the inventory isn't reachable
+              - action: assist_satellite.announce
+                target:
+                  entity_id: "{{ satellite }}"
+                data:
+                  message: "{{ r.content.speech if r is defined and r.status in [200, 404] else 'Sorry, the inventory is not reachable.' }}"
+                  preannounce: false
+
+# ---- Say "start inventory" (or "start inventory in the garage") next to a voice satellite.
+# The room comes from the area the satellite is assigned to in Home Assistant.
+automation:
+  - id: inventory_dictation_start
+    alias: Inventory dictation - start
+    mode: parallel
+    max: 5
+    triggers:
+      - trigger: conversation
+        command:
+          - "start inventory [dictation] [session]"
+          - "start dictating [items]"
+          - "inventory this room"
+          - "start inventory in [the] {room}"
+    actions:
+      - variables:
+          satellite: >-
+            {% set s = trigger.satellite_id %}
+            {% if not s and trigger.device_id %}
+              {% set s = device_entities(trigger.device_id) | select('match', '^assist_satellite[.]') | first | default('') %}
+            {% endif %}
+            {{ s or '' }}
+          area: >-
+            {% if trigger.slots.room is defined and trigger.slots.room %}{{ trigger.slots.room }}
+            {%- elif satellite %}{{ area_name(satellite) or '' }}
+            {%- elif trigger.device_id %}{{ area_name(trigger.device_id) or '' }}{% endif %}
+      - if: "{{ satellite | trim == '' }}"
+        then:
+          - set_conversation_response: >-
+              Dictation needs a voice satellite. In the app, tap Dictate instead.
+          - stop: "no satellite"
+      - if: "{{ area | trim == '' }}"
+        then:
+          - set_conversation_response: >-
+              I can't tell which room this speaker is in. Assign it to an area in Home Assistant,
+              or say start inventory in the kitchen.
+          - stop: "no area"
+      - action: rest_command.inventory_session_start
+        data:
+          id: "{{ satellite | trim }}"
+          area: "{{ area | trim }}"
+          areas: "{{ areas() | map('area_name') | list }}"
+        response_variable: started
+      - if: "{{ started is not defined or started.status != 200 }}"
+        then:
+          - set_conversation_response: "Sorry, the inventory is not reachable."
+          - stop: "inventory unreachable"
+      - set_conversation_response: "Okay, adding to the {{ started.content.area }}."
+      # non-blocking: the automation must finish so the reply above is spoken before we start listening
+      - action: script.turn_on
+        target:
+          entity_id: script.inventory_dictation_step
+        data:
+          variables:
+            satellite: "{{ satellite | trim }}"
+            prompt: "What do you see?"
+            misses: 0

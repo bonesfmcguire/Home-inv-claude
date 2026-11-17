@@ -119,6 +119,17 @@ dialog#lb{width:min(900px,calc(100vw - 24px));background:transparent;box-shadow:
 #lb img{width:100%;max-height:80dvh;object-fit:contain;border-radius:14px;display:block;background:#000}
 #lb .cap{color:#fff;text-align:center;margin-top:10px;font-weight:500;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 
+.mic.big{width:64px;height:64px;border-radius:50%}
+.dict-ctl{display:flex;align-items:center;gap:14px;margin:4px 0 12px}
+.dstatus{font-weight:600}
+.dlog{list-style:none;margin:0 0 12px;padding:0;max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.dlog:empty{display:none}
+.dlog li{padding:9px 12px;border-bottom:1px solid var(--line);font-size:14px}
+.dlog li:last-child{border-bottom:0}
+.dlog .heard{color:var(--muted);font-size:12.5px}
+.dlog .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+.dlog .undone{color:var(--danger)}
+.dlog .tag{background:var(--accent-soft);color:var(--accent)}
 .toast{position:fixed;left:16px;right:16px;margin:0 auto;width:fit-content;bottom:24px;transform:translateY(20px);opacity:0;background:var(--text);color:var(--bg);padding:12px 18px;border-radius:14px;max-width:min(560px,calc(100vw - 32px));box-shadow:0 10px 30px rgba(0,0,0,.25);transition:.25s;pointer-events:none;z-index:10}
 .toast.show{opacity:1;transform:none}
 @media (max-width:560px){
@@ -150,13 +161,14 @@ dialog#lb{width:min(900px,calc(100vw - 24px));background:transparent;box-shadow:
     <div class="seg" id="seg"><button data-f="all" class="on">All</button><button data-f="out">In use</button><button data-f="stored">Stored</button></div>
     <button class="btn" id="newBtn" title="New item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>
     <button class="btn" id="importBtn" title="Add a list or import a spreadsheet"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>Add list</span></button>
+    <button class="btn" id="dictBtn" title="Walk into a room and dictate what you see"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Dictate</span></button>
     <a class="btn" href="api/export.csv" title="Export CSV"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0L8 7m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Export</span></a>
   </div>
 
   <main id="list"></main>
 </div>
 
-<datalist id="locs"></datalist><datalist id="cats"></datalist>
+<datalist id="rooms"></datalist><datalist id="locs"></datalist><datalist id="cats"></datalist>
 
 <dialog id="edit"><form class="dlg" method="dialog" id="editForm">
   <h3 id="editTitle">Edit item</h3>
@@ -213,6 +225,19 @@ dialog#lb{width:min(900px,calc(100vw - 24px));background:transparent;box-shadow:
   <div class="actions"><button class="btn" id="impCancel">Cancel</button><button class="btn primary" id="impGo" disabled>Add</button></div>
 </div></dialog>
 
+<dialog id="dict"><div class="dlg">
+  <h3>Walk-around dictation</h3>
+  <p class="muted" style="margin-top:-6px">Pick the room you're standing in, tap the mic, and name things as you see them. Things you say “in the drawer” or “on the top shelf” are filed inside the room. Say <b>undo</b> to remove the last thing and <b>done</b> to finish.</p>
+  <div class="field"><label for="d-room">Room</label><input id="d-room" list="rooms" placeholder="Kitchen" autocomplete="off"></div>
+  <div class="dict-ctl">
+    <button type="button" class="mic big" id="dMic" aria-label="Start dictating"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <div><div class="dstatus" id="dStatus">Not started</div><div class="muted" id="dSub">Tap the mic to begin</div></div>
+  </div>
+  <ul class="dlog" id="dLog"></ul>
+  <form id="dForm" class="quick" autocomplete="off" style="box-shadow:none"><input id="dType" placeholder="…or type what you see" style="flex:1;min-width:0;border:0;outline:0;background:transparent;padding:8px;font-size:15px"><button class="btn" type="submit" style="height:38px">Add</button></form>
+  <div class="actions"><button type="button" class="btn" id="dUndo">Undo last</button><span class="spacer"></span><button type="button" class="btn primary" id="dDone">Done</button></div>
+</div></dialog>
+
 <dialog id="lb"><img id="lbImg" alt=""><div class="cap" id="lbCap"></div></dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -266,6 +291,7 @@ function render() {
   $('#stats').innerHTML = `<span class="chip"><b>${items.length}</b> items</span><span class="chip"><b>${locSet.size}</b> places</span><span class="chip"><b>${items.filter(i=>i.stored).length}</b> stored</span>` +
     (value > 0 ? `<span class="chip"><b>${money(value)}</b> value</span>` : '');
   $('#locs').innerHTML = [...locSet.values()].sort().map(l => `<option value="${esc(l)}">`).join('');
+  $('#rooms').innerHTML = [...new Set([...locSet.values()].map(l => l.split(/\s*\/\s*/)[0]))].sort().map(l => `<option value="${esc(l)}">`).join('');
   $('#cats').innerHTML = [...new Set(items.map(i => i.category).filter(Boolean))].sort().map(c => `<option value="${esc(c)}">`).join('');
 
   if (!items.length) {
@@ -536,6 +562,74 @@ $('#impFile').addEventListener('change', async e => {
     } catch { return toast('Could not read that spreadsheet. Try saving it as CSV, or copy-paste the cells.'); }
   } else text = await f.text();
   $('#impText').value = text; preview();
+});
+
+// ---- walk-around dictation (talks to the same /api/session endpoints Home Assistant uses)
+let dsess = null, drec = null, dwanted = false;
+const dSet = (t, sub = '') => { $('#dStatus').textContent = t; $('#dSub').textContent = sub; };
+function dLogEntry(text, r) {
+  const li = document.createElement('li');
+  const chips = (r.added || []).map(i => `<span class="tag">${i.quantity > 1 ? esc(i.quantity) + ' × ' : ''}${esc(i.name)}${i.location !== r.area ? ' · ' + esc(i.location.replace(r.area + ' / ', '')) : ''}</span>`).join('');
+  li.innerHTML = `<div class="heard">“${esc(text)}”</div>` + (r.undone ? `<div class="undone">${esc(r.speech)}</div>` : chips ? `<div class="chips">${chips}</div>` : `<div class="muted">${esc(r.speech)}</div>`);
+  $('#dLog').prepend(li);
+}
+async function dStart() {
+  const room = $('#d-room').value.trim();
+  if (!room) { toast('Which room are you in?'); $('#d-room').focus(); return false; }
+  try {
+    const r = await api('session/start', { method: 'POST', body: { area: room } });
+    dsess = r.id; $('#d-room').value = r.area; $('#d-room').disabled = true; safeSet('room', r.area);
+    dSet(`Adding to ${r.area}`, SR ? 'Listening… say “done” when finished' : 'Type what you see below');
+    return true;
+  } catch (err) { toast(err.message); return false; }
+}
+function dListen() {
+  if (!SR) return;
+  drec = new SR(); drec.lang = navigator.language || 'en-US'; drec.continuous = true; drec.interimResults = true;
+  drec.onresult = ev => {
+    let interim = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const r = ev.results[i];
+      if (r.isFinal) dSay(r[0].transcript.trim()); else interim += r[0].transcript;
+    }
+    if (interim) $('#dSub').textContent = interim;
+  };
+  drec.onstart = () => $('#dMic').classList.add('live');
+  drec.onend = () => { $('#dMic').classList.remove('live'); if (dsess && dwanted) { try { drec.start(); } catch {} } };  // browsers stop after a pause
+  drec.onerror = ev => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { dwanted = false; toast('Microphone permission was denied.'); } };
+  dwanted = true; try { drec.start(); } catch {}
+}
+function dStopListening() { dwanted = false; try { drec?.stop(); } catch {} $('#dMic').classList.remove('live'); }
+async function dSay(text) {
+  if (!text) return;
+  if (!dsess && !(await dStart())) return;
+  try {
+    const r = await api('session/say', { method: 'POST', body: { id: dsess, text } });
+    if (r.done) return dFinish(r);
+    dLogEntry(text, r); dSet(`Adding to ${r.area}`, r.speech); await load();
+  } catch (err) { dStopListening(); dsess = null; $('#d-room').disabled = false; dSet('Session ended', err.message); }
+}
+async function dFinish(r) {
+  dStopListening(); dsess = null; $('#d-room').disabled = false;
+  dSet('Finished', r.speech); toast(r.speech, 4500); await load();
+  $('#dict').close();
+}
+$('#dictBtn').onclick = () => {
+  $('#d-room').value = safeGet('room') || ''; $('#d-room').disabled = false; $('#dLog').innerHTML = '';
+  dSet('Not started', 'Tap the mic to begin'); $('#dict').showModal(); $('#d-room').focus();
+};
+$('#dMic').onclick = async () => {
+  if (!dsess) { if (await dStart()) dListen(); return; }
+  if (dwanted) { dStopListening(); dSet(`Paused — ${$('#d-room').value}`, 'Tap the mic to resume'); } else dListen();
+};
+$('#dForm').addEventListener('submit', e => { e.preventDefault(); const t = $('#dType').value.trim(); $('#dType').value = ''; dSay(t); });
+$('#dUndo').onclick = () => dSay('undo');
+$('#dDone').onclick = async () => {
+  if (!dsess) return $('#dict').close();
+  try { dFinish(await api('session/end', { method: 'POST', body: { id: dsess } })); } catch (err) { toast(err.message); $('#dict').close(); }
+};
+$('#dict').addEventListener('close', () => {  // Esc / click-away: end the server-side session too
+  if (dsess) { const id = dsess; dStopListening(); dsess = null; api('session/end', { method: 'POST', body: { id } }).then(load).catch(() => {}); }
 });
 
 load().catch(err => { $('#list').innerHTML = `<div class="empty">Can't reach the inventory server.<br><span class="muted">${esc(err.message)}</span></div>`; });

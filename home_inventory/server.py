@@ -14,6 +14,7 @@ import re
 import secrets
 import sqlite3
 import threading
+import time
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -260,8 +261,11 @@ def get_item(c, item_id):
     return row(r) if r else None
 
 
-def add_item(c, data):
-    """Add an item, merging quantity into an identical name+location entry."""
+def add_item(c, data, trace=None):
+    """Add an item, merging quantity into an identical name+location entry.
+
+    `trace` (a list) collects what happened so a dictation session can undo it.
+    """
     d = clean(data)
     d["location"] = canon_location(c, d["location"])
     ex = c.execute(
@@ -279,6 +283,8 @@ def add_item(c, data):
             upd["price"] = d["price"]
         sets = ", ".join(f"{k}=?" for k in upd)
         c.execute(f"UPDATE items SET {sets} WHERE id=?", (*upd.values(), ex["id"]))
+        if trace is not None:
+            trace.append({"id": ex["id"], "qty": d["quantity"], "created": False})
         return get_item(c, ex["id"])
     ts = now()
     cols = list(FIELDS)
@@ -286,6 +292,8 @@ def add_item(c, data):
         f"INSERT INTO items({','.join(cols)},created_at,updated_at) VALUES({','.join('?' * (len(cols) + 2))})",
         (*[d[f] for f in cols], ts, ts),
     )
+    if trace is not None:
+        trace.append({"id": cur.lastrowid, "qty": d["quantity"], "created": True})
     return get_item(c, cur.lastrowid)
 
 
@@ -372,7 +380,7 @@ NUM_WORDS = [
     ("a couple of", 2), ("a couple", 2), ("couple of", 2), ("a dozen", 12), ("a few", 3),
     ("dozen", 12), ("one", 1), ("two", 2), ("three", 3), ("four", 4), ("five", 5), ("six", 6),
     ("seven", 7), ("eight", 8), ("nine", 9), ("ten", 10), ("eleven", 11), ("twelve", 12),
-    ("twenty", 20), ("an", 1), ("a", 1), ("some", 1),
+    ("twenty", 20), ("another", 1), ("an", 1), ("a", 1), ("some", 1),
 ]
 LOC_SPLIT = re.compile(
     r"\s+(?:in|on|at|inside|into|under|underneath|behind|beside|next to|on top of)\s+(?:the\s+|my\s+|our\s+)?"
@@ -475,7 +483,7 @@ def parse_phrase(text, default_location="", hint_buy=False):
     parts = LOC_SPLIT.split(t, maxsplit=1)
     name, location = parts[0], (parts[1] if len(parts) > 1 else default_location)
     qty, name = take_quantity(name)
-    name = strip_articles(name).strip(" ,;")
+    name = re.sub(r"^(?:more|additional)\s+", "", strip_articles(name), flags=re.I).strip(" ,;")
     item = {
         "name": cap(name),
         "quantity": qty or 1,
@@ -908,6 +916,134 @@ def command(c, text, action=None, dry_run=False):
     return {"action": "remove", "speech": f"Removed {it['name']} from your inventory.", "results": [], "removed": it}
 
 
+# ------------------------------------------------------------ dictation sessions
+# "Walk into a room, start dictating, name things as you see them."  A session
+# remembers which room you're in, so every item you say lands there (or in a
+# sub-place of it, e.g. "batteries in the junk drawer" -> Kitchen / Junk drawer).
+
+SESSIONS = {}
+SESSION_TTL = 30 * 60
+KNOWN_AREAS = set()  # lower-case room names Home Assistant told us about
+
+_FILLER = r"(?:ok(?:ay)?|um+|uh+|so|and|also|next|then|now|alright|right|oh|yeah)"
+LEAD_FILLER = re.compile(r"^(?:" + _FILLER + r"[, ]+)+", re.I)
+LEAD_SEE = re.compile(
+    r"^(?:i (?:can )?see|there(?:'s| is| are)(?: also)?|i have|we have|i'?ve got|i got|got|add|put"
+    r"|over here (?:is|are)|here(?:'s| is| are)|looks like|this is|these are|it(?:'s| is))\s+",
+    re.I,
+)
+_END = (r"(?:done|finished|finish|stop|stop dictating|end|end session|end dictation|that'?s (?:all|it)"
+        r"|that is (?:all|it)|all done|nothing else|nothing more|exit|quit)")
+END_RE = re.compile(
+    r"^(?:(?:ok(?:ay)?|alright|thanks?|right)[, ]+)?(?:(?:i'?m|we'?re|i am|we are) )?" + _END
+    + r"(?: now| for now| here| thanks| thank you)?$", re.I)
+UNDO_RE = re.compile(
+    r"^(?:undo(?: that| last| the last(?: one| item)?)?|scratch that|never ?mind(?: that)?|oops"
+    r"|(?:delete|remove|cancel) (?:that|the last(?: one| item)?)|take that back)$", re.I)
+HERE_RE = re.compile(r"^(?:here|there|in here|this room|the room|this area)$", re.I)
+
+
+def _gc_sessions():
+    t = time.time()
+    for k in [k for k, v in SESSIONS.items() if t - v["last"] > SESSION_TTL]:
+        del SESSIONS[k]
+
+
+def get_session(sid):
+    _gc_sessions()
+    s = SESSIONS.get(str(sid or ""))
+    if not s:
+        raise LookupError("That dictation session has ended. Start a new one.")
+    s["last"] = time.time()
+    return s
+
+
+def start_session(c, sid, area, areas=None):
+    area = canon_location(c, str(area or "")[:120])
+    if not area:
+        raise ValueError("Which room are you in?")
+    sid = re.sub(r"[^\w.\-]", "", str(sid or ""))[:64] or secrets.token_hex(4)
+    for a in areas or []:
+        if isinstance(a, str) and a.strip():
+            KNOWN_AREAS.add(segs(a)[0].lower() if segs(a) else a.lower())
+    KNOWN_AREAS.add(segs(area)[0].lower())
+    SESSIONS[sid] = {"id": sid, "area": area, "log": [], "last": time.time()}
+    return {"id": sid, "area": area, "done": False,
+            "speech": f"Okay, adding to {spoken_location(area)}. What do you see?"}
+
+
+def session_location(c, area, spoken):
+    """Where a spoken place goes, given the room you're standing in."""
+    a = segs(area)
+    spoken = re.sub(r"\s+(?:in |over )?here$", "", (spoken or "").strip(), flags=re.I) if spoken and not HERE_RE.match(spoken.strip()) else spoken
+    s = segs(spoken)
+    if not s or HERE_RE.match((spoken or "").strip()):
+        return area
+    existing = {l.lower() for (l,) in c.execute("SELECT DISTINCT location FROM items WHERE location<>''")}
+    nested = " / ".join(a + s)
+    if nested.lower() in existing:  # e.g. Bedroom / Closet already exists
+        return nested
+    top = {segs(l)[0].lower() for l in existing if segs(l)} | KNOWN_AREAS | {a[0].lower()}
+    if s[0].lower() in top:  # "in the garage" while standing in the kitchen
+        return " / ".join(s)
+    return nested
+
+
+def _names(items):
+    return join_list([describe(i, False) for i in items], 8)
+
+
+def session_say(c, sid, text):
+    s = get_session(sid)
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    plain = t.lower().strip(" .,!?;")
+    base = {"id": s["id"], "area": s["area"], "heard": t, "done": False, "added": []}
+    if not plain:
+        return dict(base, speech="I didn't catch that.")
+    if END_RE.match(plain) or plain in {"thanks", "thank you", "thank you very much"}:
+        return end_session(c, sid)
+    if plain in {"ok", "okay", "yes", "yeah", "no", "hmm", "um", "uh", "hello", "hey"}:
+        return dict(base, speech="I'm listening.")
+    if UNDO_RE.match(plain):
+        if not s["log"]:
+            return dict(base, speech="There's nothing to undo.")
+        entry = s["log"].pop()
+        for tr in reversed(entry["trace"]):
+            it = get_item(c, tr["id"])
+            if not it:
+                continue
+            if tr["created"]:
+                delete_item(c, tr["id"])
+            else:
+                update_item(c, tr["id"], {"quantity": max(it["quantity"] - tr["qty"], 0)})
+        return dict(base, undone=True, speech=f"Removed {entry['names']}.")
+    t = LEAD_FILLER.sub("", t)
+    t = LEAD_SEE.sub("", t)
+    t = LEAD_FILLER.sub("", t)
+    t = re.sub(r"\s+(?:over|right) here\b", "", t, flags=re.I)
+    items = [i for i in parse_list_line(t) if i["name"]]
+    if not items:
+        return dict(base, speech="Sorry, I didn't catch an item.")
+    trace, saved = [], []
+    for it in items:
+        it["location"] = session_location(c, s["area"], it["location"])
+        saved.append(add_item(c, it, trace))
+    names = _names(items)
+    s["log"].append({"text": t, "trace": trace, "names": names})
+    return dict(base, added=saved, speech=f"Added {names}.", count=sum(len(e["trace"]) for e in s["log"]))
+
+
+def end_session(c, sid):
+    _gc_sessions()
+    s = SESSIONS.pop(str(sid or ""), None)
+    if not s:
+        return {"id": sid, "done": True, "added": [], "speech": "Okay."}
+    n = sum(len(e["trace"]) for e in s["log"])
+    speech = (f"Done. Added {n} item{'s' if n != 1 else ''} in {spoken_location(s['area'])}." if n
+              else "Okay, nothing added.")
+    return {"id": s["id"], "area": s["area"], "done": True, "added": [], "count": n, "speech": speech}
+
+
 CSV_COLUMNS = [
     ("Name", "name"), ("Quantity", "quantity"), ("Location", "location"), ("Stored", "stored"),
     ("Category", "category"), ("Price", "price"), ("Purchase date", "purchase_date"),
@@ -1057,6 +1193,14 @@ class Handler(BaseHTTPRequestHandler):
                 return {"items": canon_batch(c, items), "count": len(items)}
             added = [add_item(c, i) for i in items]
             return {"items": added, "count": len(added), "speech": f"Added {len(added)} item{'s' if len(added) != 1 else ''}."}
+        if path == "/api/session/start" and method == "POST":
+            d = self.body()
+            return start_session(c, d.get("id"), d.get("area"), d.get("areas"))
+        if path == "/api/session/say" and method == "POST":
+            d = self.body()
+            return session_say(c, d.get("id"), d.get("text"))
+        if path == "/api/session/end" and method == "POST":
+            return end_session(c, self.body().get("id"))
         if path == "/api/stats":
             return stats(c)
         if path == "/api/locations" and method == "GET":

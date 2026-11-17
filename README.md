@@ -5,6 +5,7 @@ A dead-simple home inventory that you can type to, talk to, paste spreadsheets i
 - **One box for everything:** type or say `3 AA batteries in the kitchen drawer`, `tent in the attic, stored`, `where are the batteries?`, `what's in the garage`, `used 2 batteries`, or `move the drill to the shed`.
 - **Lists, not just single items:** `drill, saw and 2 tarps in the garage` adds three items. Paste several lines and you get a review screen first, where you can skip any row before adding.
 - **Locations and storage:** items are grouped by place. Use `/` for nesting (`Garage / Shelf 2`). Places are **case-insensitive**: `living room`, `Living Room` and `LIVING ROOM` are the same place, and a place keeps the spelling you already use. The pencil on a place renames it. Each item has a **stored** flag (packed away vs. in use).
+- **Walk-around dictation:** walk into a room, say *"start inventory"* to a voice satellite (or tap **Dictate** in the app), and name things as you see them: *"a toaster, two mugs and a blender"*. The room comes from the satellite's area in Home Assistant, so everything lands there. *"Batteries in the junk drawer"* is filed as `Kitchen / Junk drawer`. Say *"undo"* to take back the last thing and *"done"* to finish.
 - **Purchase details and photos:** optional price, purchase date, where it was bought, brand/model, serial number, warranty date and a photo. The list shows thumbnails and total value, and you can ask "how much did the TV cost?"
 - **Bulk input:** paste cells straight from Excel or Google Sheets, upload a CSV/TSV/XLSX, or paste a plain list. You see a preview before anything is imported.
 - **Home Assistant:** runs as an add-on in your sidebar. Assist voice intents and LLM tools let you ask "where are my AA batteries?" from any voice satellite.
@@ -85,6 +86,25 @@ You also get **`sensor.inventory_items`**, with attributes for total quantity, n
 
 ---
 
+### Dictating a room (hands-free, no wake word between items)
+
+Say **"start inventory"** (or *"start inventory in the garage"*, *"inventory this room"*) to a voice satellite. The satellite replies *"Okay, adding to the Kitchen."* and then keeps listening and confirming each phrase:
+
+> **You:** "Start inventory" · **Assist:** "Okay, adding to the Kitchen. What do you see?"
+> **You:** "A toaster, two mugs and a blender" · **Assist:** "Added Toaster, 2 Mugs and Blender."
+> **You:** "Three AA batteries in the junk drawer" · **Assist:** "Added 3 AA batteries."
+> **You:** "Scratch that" · **Assist:** "Removed 3 AA batteries."
+> **You:** "Done" · **Assist:** "Done. Added 3 items in the Kitchen."
+
+How the room is chosen: the satellite's **area** in Home Assistant (Settings → Devices → your satellite → area). Saying a different room ("start inventory in the garage") overrides it, and while dictating, "in the garage" files an item in the garage even if you're standing in the kitchen. Two silences in a row end the session, and sessions expire after 30 minutes idle.
+
+What it needs, and what I could and couldn't check:
+- Home Assistant **2025.7 or newer** and a satellite that supports `assist_satellite.ask_question` (Home Assistant Voice Preview Edition and ESPHome satellites do; some basic Wyoming satellites don't).
+- The package from step 2 above (it adds the sentence, three REST commands and the `inventory_dictation_step` script). If you keep your automations in the UI rather than YAML and `automation:` in a package gives you trouble, paste the `automation:` entry from the package into a new automation in YAML mode.
+- I tested the server side and the in-app Dictate mode end to end, and rendered the package's templates and posted its REST payloads to the real server. I could not run this against a real Home Assistant instance or satellite, so expect to tweak the YAML on first use. Open Settings → Automations & scenes → *Inventory dictation - start* → Traces if it doesn't respond.
+
+No satellite in the room? Open the app on your phone, tap **Dictate**, pick the room and talk. Typing into the box works too.
+
 ## 3. Getting data in
 
 - **Spreadsheet:** select the cells in Excel or Sheets, copy, then click **Add list** and paste. Headers are recognised loosely: `Item/Name`, `Qty/Count`, `Location/Where/Room`, `Stored`, `Category`, `Price/Cost`, `Purchase date/Acquired`, `Store/Purchased from`, `Brand/Model`, `Serial`, `Warranty`, `Notes`. Without a header row, tab-separated columns are read as *Name, Location, Quantity, Category, Notes*. `.xlsx` upload also works; it loads a parser from a CDN on first use. If you're offline, save the sheet as CSV.
@@ -115,6 +135,7 @@ You also get **`sensor.inventory_items`**, with attributes for total quantity, n
 | POST | `/api/command` | `{text}`: natural language add/remove/move/ask → `{speech, results}`. `dry_run: true` returns what an add would create without saving |
 | POST | `/api/ask` | `{text}` or `{item}` or `{location}` → `{speech, results}`. `{item, about: "purchase"}` answers price / store / date |
 | POST | `/api/import` | `{text}` (CSV/TSV/list) or `{items: [...]}`; add `?dry_run=1` to preview |
+| POST | `/api/session/start`, `/api/session/say`, `/api/session/end` | dictation: `{id, area}` starts a session for a room; `{id, text}` adds what was said (also understands *undo* and *done*); `{id}` ends it |
 | GET | `/api/stats` (includes total `value`), `/api/locations`, `/api/export.csv` | |
 
 ## Security note
